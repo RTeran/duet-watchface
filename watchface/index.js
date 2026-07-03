@@ -70,12 +70,12 @@ const HAND_MINUTE_POS = { posX: 5, posY: 205 }; // path is theme-driven
 
 // Digital heart — two stacked rows (HH above, MM below), centered on the dial.
 // Row boxes are symmetric around CY; exact px tuned in the simulator.
-const DIGIT_SIZE = 64;
+const DIGIT_SIZE = 84;
 const DIGIT_BOX_W = 200;
-const DIGIT_BOX_H = 76;
+const DIGIT_BOX_H = 100;
 // Each row's center offset from CY — mirrored in tools/render-assets.py
 // (DIGIT_ROW_DY). Boxes may overlap; they are transparent.
-const DIGIT_ROW_DY = 32;
+const DIGIT_ROW_DY = 42;
 
 const NORMAL = show_level.ONLY_NORMAL;
 const AOD = show_level.ONAL_AOD;
@@ -191,7 +191,23 @@ WatchFace({
 			show_level: NORMAL,
 		});
 
-		// ── AOD — digital heart only, dim gray, minimum lit pixels ───────────
+		// ── AOD — digital heart + white hands, minimum lit pixels ────────────
+		// Separate TIME_POINTER so the minute hand stays white in AOD instead
+		// of inheriting the theme accent (the ivory PNG doubles as white).
+		createWidget(widget.TIME_POINTER, {
+			hour_path: HAND_HOUR.path,
+			hour_centerX: CX,
+			hour_centerY: CY,
+			hour_posX: HAND_HOUR.posX,
+			hour_posY: HAND_HOUR.posY,
+			minute_path: "hands/minute-ivory.png",
+			minute_centerX: CX,
+			minute_centerY: CY,
+			minute_posX: HAND_MINUTE_POS.posX,
+			minute_posY: HAND_MINUTE_POS.posY,
+			show_level: AOD,
+		});
+
 		const aodHoursWidget = createWidget(widget.TEXT, {
 			x: CX - DIGIT_BOX_W / 2,
 			y: CY - DIGIT_ROW_DY - DIGIT_BOX_H / 2,

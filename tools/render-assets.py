@@ -58,7 +58,7 @@ THEMES = [
 DEFAULT_THEME = "champagne"
 
 # Dial
-NUMERAL_SIZE = 60
+NUMERAL_SIZE = 52
 NUMERAL_R = 197  # radius of each numeral's center — hugging the rim
 TICK_R_OUT = 222
 TICK_R_IN = 202
@@ -74,8 +74,8 @@ HOUR_VIS_R = 100  # aligned with the minute hand so the empty ring reads as one
 HOUR_W = 10
 
 # Digital center (preview only; the watch renders live TEXT widgets)
-DIGIT_SIZE = 64
-DIGIT_ROW_DY = 32  # each row's center offset from CY — mirrored in index.js
+DIGIT_SIZE = 84
+DIGIT_ROW_DY = 42  # each row's center offset from CY — mirrored in index.js
 
 PREVIEW_HOUR = 10
 PREVIEW_MINUTE = 9
