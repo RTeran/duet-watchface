@@ -31,7 +31,7 @@ const THEMES = {
 	sapphire: { accent: 0x7fa6d9, minute: "hands/minute-sapphire.png" },
 	turquoise: { accent: 0x6fc2c2, minute: "hands/minute-turquoise.png" },
 	emerald: { accent: 0x6cbf9a, minute: "hands/minute-emerald.png" },
-	white: { accent: 0xffffff, minute: "hands/minute-white.png" },
+	ivory: { accent: 0xfffbf0, minute: "hands/minute-ivory.png" },
 };
 const DEFAULT_KEY = "champagne";
 
@@ -46,7 +46,7 @@ const EDIT_COLOR_AMETHYST = 0x186a3;
 const EDIT_COLOR_SAPPHIRE = 0x186a4;
 const EDIT_COLOR_TURQUOISE = 0x186a5;
 const EDIT_COLOR_EMERALD = 0x186a6;
-const EDIT_COLOR_WHITE = 0x186a7;
+const EDIT_COLOR_IVORY = 0x186a7;
 
 const COLOR_TYPE_TO_KEY = {
 	[EDIT_COLOR_CHAMPAGNE]: "champagne",
@@ -56,7 +56,7 @@ const COLOR_TYPE_TO_KEY = {
 	[EDIT_COLOR_SAPPHIRE]: "sapphire",
 	[EDIT_COLOR_TURQUOISE]: "turquoise",
 	[EDIT_COLOR_EMERALD]: "emerald",
-	[EDIT_COLOR_WHITE]: "white",
+	[EDIT_COLOR_IVORY]: "ivory",
 };
 
 // Hand geometry — MUST mirror tools/render-assets.py. Each hand PNG points to
@@ -134,7 +134,7 @@ WatchFace({
 				{ type: EDIT_COLOR_SAPPHIRE, preview: EDIT_ROOT + "preview-color-sapphire.png", title_en: "Sapphire" },
 				{ type: EDIT_COLOR_TURQUOISE, preview: EDIT_ROOT + "preview-color-turquoise.png", title_en: "Turquoise" },
 				{ type: EDIT_COLOR_EMERALD, preview: EDIT_ROOT + "preview-color-emerald.png", title_en: "Emerald" },
-				{ type: EDIT_COLOR_WHITE, preview: EDIT_ROOT + "preview-color-white.png", title_en: "White" },
+				{ type: EDIT_COLOR_IVORY, preview: EDIT_ROOT + "preview-color-ivory.png", title_en: "Ivory" },
 			],
 			count: 8,
 		});

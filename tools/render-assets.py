@@ -53,7 +53,7 @@ THEMES = [
     ("sapphire", (127, 166, 217)),   # 7fa6d9
     ("turquoise", (111, 194, 194)),  # 6fc2c2
     ("emerald", (108, 191, 154)),    # 6cbf9a
-    ("white", (255, 255, 255)),      # ffffff
+    ("ivory", (255, 251, 240)),      # fffbf0 — monochrome: matches the dial ivory
 ]
 DEFAULT_THEME = "champagne"
 
