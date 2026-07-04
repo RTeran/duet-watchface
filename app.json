@@ -12,7 +12,12 @@
 		"description": "Duet watchface — floating hands and a digital heart. For Amazfit Active 2 Round & GTR 4",
 		"icon": "images/preview.png"
 	},
-	"permissions": [],
+	"permissions": [
+		"data:user.hd.step",
+		"data:user.hd.calorie",
+		"data:user.hd.heart_rate",
+		"data:user.hd.pai"
+	],
 	"runtime": {
 		"apiVersion": {
 			"compatible": "3.0.0",

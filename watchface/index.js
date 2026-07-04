@@ -6,17 +6,28 @@ import {
 	prop,
 	show_level,
 } from "@zos/ui";
-import { Time } from "@zos/sensor";
+import {
+	Time,
+	Battery,
+	Step,
+	Calorie,
+	HeartRate,
+	Pai,
+	Weather,
+} from "@zos/sensor";
 
 // Trial: Jost Light (OFL) on both layers — the same face the dial numerals are
 // baked with, so analog and digital speak with one geometric voice. Swap back
 // to "assets://fonts/Rubik-Bold.ttf" (still bundled) to revert the A/B.
 const FONT = "assets://fonts/Jost-Light.ttf";
+// Material Icons Outlined, subset to Duet's glyphs + converted CFF→glyf by
+// tools/make-icon-font.py. Rendered live as TEXT widgets (tintable, scalable).
+const ICONS_FONT = "assets://fonts/icons-outlined.ttf";
 
 const CX = 233; // screen center x
 const CY = 233; // screen center y
 
-const IVORY = 0xfffbf0; // analog layer: numerals, batons, hour hand
+const IVORY = 0xfffbf0; // analog layer: numerals, batons, hour hand, complications
 const AOD_GRAY = 0x999999;
 
 // Editable accent themes — the color the user picks in edit mode paints the
@@ -59,23 +70,88 @@ const COLOR_TYPE_TO_KEY = {
 	[EDIT_COLOR_IVORY]: "ivory",
 };
 
-// Hand geometry — MUST mirror tools/render-assets.py. Each hand PNG points to
-// 12 o'clock with its tip at row 0 and the dial center at (posX, posY); only
-// the outer segment is painted, so the visible bar floats while the firmware
-// rotates the full (mostly transparent) image like a traditional hand.
-// The hour hand's visible half starts at the same radius as the minute's so
-// the empty inner ring reads as one clean circle around the digital digits.
-const HAND_HOUR = { path: "hands/hour.png", posX: 7, posY: 155 };
-const HAND_MINUTE_POS = { posX: 5, posY: 205 }; // path is theme-driven
+// ── Complications ────────────────────────────────────────────────────────────
+// Two circular badges on the LEFT and RIGHT, each editable to one of a shared
+// catalog of data, or hidden. Rendered in ivory only (the accent stays exclusive
+// to the minute hand + digits). Hidden in AOD. The badge sits BELOW the hands —
+// its widgets are created before the TIME_POINTER so the hands sweep in front.
 
-// Digital heart — two stacked rows (HH above, MM below), centered on the dial.
-// Row boxes are symmetric around CY; exact px tuned in the simulator.
-const DIGIT_SIZE = 84;
-const DIGIT_BOX_W = 200;
-const DIGIT_BOX_H = 100;
-// Each row's center offset from CY — mirrored in tools/render-assets.py
-// (DIGIT_ROW_DY). Boxes may overlap; they are transparent.
-const DIGIT_ROW_DY = 42;
+// Zepp OS Time.getDay() is 1 (Mon) … 7 (Sun); index with getDay() - 1.
+const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+// Weather condition glyphs from icons-outlined.ttf, one per bucket.
+// Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
+const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\uf1ad", "\ueb3b", "\uebdb"];
+// getForecastWeather().forecastData.data[0].index (0–28) → bucket. Index meanings
+// per the ZeppOS Weather docs; night variants fold into their daytime bucket.
+const WEATHER_INDEX_TO_BUCKET = {
+	0: 1, 1: 3, 2: 4, 3: 0, 4: 2, 5: 3, 6: 4, 7: 3, 8: 4, 9: 4,
+	10: 3, 11: 2, 12: 4, 13: 2, 14: 2, 15: 5, 16: 4, 17: 2, 18: 5, 19: 5,
+	20: 5, 21: 5, 22: 2, 23: 2, 24: 5, 25: 0, 26: 1, 27: 3, 28: 0,
+};
+
+// Badge geometry — both on the horizontal centerline, equidistant between the
+// dial numerals (3 & 9) and the digital heart. Symmetric about CX.
+const COMP_AXIS_Y = CY;
+const COMP_LEFT_X = 120;
+const COMP_RIGHT_X = 346;
+const COMP_R = 31; // badge radius → the ring PNG is 62×62
+const COMP_RING_R = 29.5; // ARC_PROGRESS radius — MUST equal COMP_RING_CENTER_R in render-assets.py
+const COMP_RING_W = 3;
+const COMP_BOX_W = 62;
+const COMP_VALUE_SIZE = 26;
+const COMP_SUB_SIZE = 13; // weekday / wordmark
+const COMP_ICON_SIZE = 17;
+const RING_CLOSED = "comp/ring-closed.png";
+const RING_TRACK = "comp/ring-track.png";
+
+// Edit-mode chrome — all three tap zones (color center, left, right) share ONE
+// size, so the select ring and the preview render 1:1 on every zone (assets in
+// tools/render-assets.py are generated at EDIT_ZONE). tips = the option-name tag.
+const EDIT_ZONE = 92;
+const TIPS_W = 124;
+const TIPS_GAP = 8; // vertical gap from the zone's bottom to the name tag
+
+// Catalog order is the PERSISTED CONTRACT: an option's edit type id is
+// COMP_LEFT_BASE / COMP_RIGHT_BASE + its index here, so options may only be
+// APPENDED, never reordered (a reorder would silently repoint saved selections).
+const COMP_OPTIONS = [
+	{ datum: "date", title: "Date" },
+	{ datum: "battery", title: "Battery" },
+	{ datum: "steps", title: "Steps" },
+	{ datum: "calories", title: "Calories" },
+	{ datum: "hr", title: "Heart Rate" },
+	{ datum: "weather", title: "Weather" },
+	{ datum: "pai", title: "PAI" },
+	{ datum: "empty", title: "None" },
+];
+const COMP_LEFT_BASE = 0x186a8; // color ids occupy 0x186a0–0x186a7
+const COMP_RIGHT_BASE = 0x186b0;
+
+const TYPE_TO_DATUM = {};
+for (let i = 0; i < COMP_OPTIONS.length; i++) {
+	TYPE_TO_DATUM[COMP_LEFT_BASE + i] = COMP_OPTIONS[i].datum;
+	TYPE_TO_DATUM[COMP_RIGHT_BASE + i] = COMP_OPTIONS[i].datum;
+}
+
+// `kind` picks the ring: progress = gray track PNG + live ARC_PROGRESS fill;
+// closed = ivory ring PNG. Icons identify the datum (weather's is dynamic; date
+// shows the weekday and PAI a wordmark instead).
+const DATUM_KIND = {
+	date: "closed",
+	battery: "progress",
+	steps: "progress",
+	calories: "progress",
+	hr: "closed",
+	weather: "closed",
+	pai: "progress",
+};
+const DATUM_ICON = {
+	battery: "\ue1a4",
+	steps: "\ue536",
+	calories: "\uef55",
+	hr: "\ue87d",
+};
 
 const NORMAL = show_level.ONLY_NORMAL;
 const AOD = show_level.ONAL_AOD;
@@ -86,6 +162,20 @@ let _timeSensor = null;
 WatchFace({
 	build() {
 		const time = new Time();
+		const battery = new Battery();
+		const step = new Step();
+		const calorie = new Calorie();
+		const weather = new Weather();
+		// Optional sensors: absent on some targets — degrade to "--" instead of
+		// aborting build().
+		let heart = null;
+		let pai = null;
+		try {
+			heart = new HeartRate();
+		} catch (e) {}
+		try {
+			pai = new Pai();
+		} catch (e) {}
 
 		// ── Dial — numerals 12/3/6/9 + hour batons, baked into one PNG ───────
 		createWidget(widget.IMG, {
@@ -95,9 +185,12 @@ WatchFace({
 			show_level: NORMAL,
 		});
 
-		// ── Edit mode — pick the accent color (minute hand + digits) ─────────
-		// Masks are firmware-mandated (the edit-exit crashes without them) but
-		// kept fully transparent so the dial stays crisp instead of dimming.
+		// ── Edit mode — masks + three tap zones (color center, left, right) ──
+		// Both masks are firmware-mandated (the edit-exit crashes without them).
+		// WATCHFACE_EDIT_MASK sits BELOW the edit groups: its dark veil dims the
+		// live dial so the (opaque) preview thumbnails + name tags stand out on
+		// top. WATCHFACE_EDIT_FG_MASK sits ABOVE the edit UI, so it stays fully
+		// transparent — any opacity there would veil the previews and their names.
 		createWidget(widget.WATCHFACE_EDIT_MASK, {
 			x: 0,
 			y: 0,
@@ -115,16 +208,19 @@ WatchFace({
 			show_level: show_level.ONLY_EDIT,
 		});
 
-		// Single centered edit zone over the digital heart: the affordance ring
-		// sits around the very element whose color it changes.
+		// Centered edit zone over the digital heart: picks the accent color.
 		const colorEditGroup = createWidget(widget.WATCHFACE_EDIT_GROUP, {
 			edit_id: 1,
-			x: 133,
-			y: 133,
-			w: 200,
-			h: 200,
+			x: CX - EDIT_ZONE / 2,
+			y: COMP_AXIS_Y - EDIT_ZONE / 2,
+			w: EDIT_ZONE,
+			h: EDIT_ZONE,
 			select_image: EDIT_ROOT + "select.png",
 			un_select_image: EDIT_ROOT + "un_select.png",
+			tips_BG: EDIT_ROOT + "tips.png",
+			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_width: TIPS_W,
 			default_type: EDIT_COLOR_CHAMPAGNE,
 			optional_types: [
 				{ type: EDIT_COLOR_CHAMPAGNE, preview: EDIT_ROOT + "preview-color-champagne.png", title_en: "Champagne" },
@@ -139,28 +235,231 @@ WatchFace({
 			count: 8,
 		});
 
-		// Read the on-watch selection (firmware-persisted) before creating the
-		// widgets that depend on it. Falls back to the default on first run.
+		// Left + right complication zones. Both offer the same catalog (shared
+		// previews); only the defaults differ. Type ids are base + option index.
+		const leftEditGroup = createWidget(widget.WATCHFACE_EDIT_GROUP, {
+			edit_id: 2,
+			x: COMP_LEFT_X - EDIT_ZONE / 2,
+			y: COMP_AXIS_Y - EDIT_ZONE / 2,
+			w: EDIT_ZONE,
+			h: EDIT_ZONE,
+			select_image: EDIT_ROOT + "select.png",
+			un_select_image: EDIT_ROOT + "un_select.png",
+			tips_BG: EDIT_ROOT + "tips.png",
+			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_width: TIPS_W,
+			default_type: COMP_LEFT_BASE + 0, // Date
+			optional_types: COMP_OPTIONS.map((o, i) => ({
+				type: COMP_LEFT_BASE + i,
+				preview: EDIT_ROOT + "preview-comp-" + o.datum + ".png",
+				title_en: o.title,
+			})),
+			count: COMP_OPTIONS.length,
+		});
+		const rightEditGroup = createWidget(widget.WATCHFACE_EDIT_GROUP, {
+			edit_id: 3,
+			x: COMP_RIGHT_X - EDIT_ZONE / 2,
+			y: COMP_AXIS_Y - EDIT_ZONE / 2,
+			w: EDIT_ZONE,
+			h: EDIT_ZONE,
+			select_image: EDIT_ROOT + "select.png",
+			un_select_image: EDIT_ROOT + "un_select.png",
+			tips_BG: EDIT_ROOT + "tips.png",
+			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_width: TIPS_W,
+			default_type: COMP_RIGHT_BASE + 1, // Battery
+			optional_types: COMP_OPTIONS.map((o, i) => ({
+				type: COMP_RIGHT_BASE + i,
+				preview: EDIT_ROOT + "preview-comp-" + o.datum + ".png",
+				title_en: o.title,
+			})),
+			count: COMP_OPTIONS.length,
+		});
+
+		// Read on-watch selections (firmware-persisted) before creating the
+		// widgets that depend on them. Fall back to the defaults on first run.
 		const colorType =
 			colorEditGroup.getProperty(prop.CURRENT_TYPE) || EDIT_COLOR_CHAMPAGNE;
 		const theme = THEMES[COLOR_TYPE_TO_KEY[colorType] || DEFAULT_KEY];
 
+		const leftType =
+			leftEditGroup.getProperty(prop.CURRENT_TYPE) || COMP_LEFT_BASE + 0;
+		const rightType =
+			rightEditGroup.getProperty(prop.CURRENT_TYPE) || COMP_RIGHT_BASE + 1;
+		const leftKey = TYPE_TO_DATUM[leftType] || "date";
+		const rightKey = TYPE_TO_DATUM[rightType] || "battery";
+
+		// ── Data readers ─────────────────────────────────────────────────────
+		function readDatum(key) {
+			try {
+				switch (key) {
+					case "date":
+						return { value: String(time.getDate()), sub: DAYS[time.getDay() - 1] };
+					case "battery": {
+						const v = battery.getCurrent();
+						return { value: String(v), level: v };
+					}
+					case "steps": {
+						const c = step.getCurrent();
+						const t = step.getTarget() || 0;
+						return { value: fmtCount(c), level: t > 0 ? clampPct((c / t) * 100) : 0 };
+					}
+					case "calories": {
+						const c = calorie.getCurrent();
+						const t = calorie.getTarget() || 0;
+						return { value: String(c), level: t > 0 ? clampPct((c / t) * 100) : 0 };
+					}
+					case "hr": {
+						const v = heart && (heart.getLast() || heart.getCurrent());
+						return { value: v ? String(v) : "--" };
+					}
+					case "weather": {
+						const d0 = weather.getForecastWeather().forecastData.data[0];
+						const b = WEATHER_INDEX_TO_BUCKET[d0.index];
+						return {
+							value: typeof d0.high === "number" ? String(d0.high) + "\u00b0" : "--",
+							iconChar: WEATHER_CHARS[b === undefined ? 0 : b],
+						};
+					}
+					case "pai": {
+						const v = pai ? pai.getTotal() || 0 : 0;
+						return { value: String(v), level: clampPct(v) };
+					}
+				}
+			} catch (e) {
+				return { value: "--" };
+			}
+			return { value: "" };
+		}
+
+		// ── Complication factory ─────────────────────────────────────────────
+		// Creates a badge's widgets (all show_level NORMAL, i.e. hidden in AOD)
+		// and returns a { refresh } handle. The progress fill is created ONCE and
+		// updated in place — recreating it would push it above the later-created
+		// hands, breaking the "badge sits under the hands" z-order.
+		function makeComplication(centerX, centerY, key) {
+			if (key === "empty") return { refresh() {} };
+
+			const kind = DATUM_KIND[key];
+			const isDate = key === "date";
+			const isPai = key === "pai";
+
+			createWidget(widget.IMG, {
+				x: centerX - COMP_R,
+				y: centerY - COMP_R,
+				src: kind === "progress" ? RING_TRACK : RING_CLOSED,
+				show_level: NORMAL,
+			});
+
+			const valueW = createWidget(widget.TEXT, {
+				x: centerX - COMP_BOX_W / 2,
+				y: centerY - 22,
+				w: COMP_BOX_W,
+				h: 30,
+				color: IVORY,
+				text: "",
+				text_size: COMP_VALUE_SIZE,
+				align_h: align.CENTER_H,
+				align_v: align.CENTER_V,
+				enable_scroll: false,
+				font: FONT,
+				show_level: NORMAL,
+			});
+
+			// Identifier line: weekday (date) · wordmark (pai) · icon glyph (rest).
+			let subW = null;
+			if (isDate || isPai) {
+				subW = createWidget(widget.TEXT, {
+					x: centerX - COMP_BOX_W / 2,
+					y: centerY + 3,
+					w: COMP_BOX_W,
+					h: 20,
+					color: IVORY,
+					text: isPai ? "PAI" : "",
+					text_size: COMP_SUB_SIZE,
+					align_h: align.CENTER_H,
+					align_v: align.CENTER_V,
+					enable_scroll: false,
+					font: FONT,
+					show_level: NORMAL,
+				});
+			} else {
+				subW = createWidget(widget.TEXT, {
+					x: centerX - COMP_BOX_W / 2,
+					y: centerY + 2,
+					w: COMP_BOX_W,
+					h: 22,
+					color: IVORY,
+					text: DATUM_ICON[key] || "",
+					text_size: COMP_ICON_SIZE,
+					align_h: align.CENTER_H,
+					align_v: align.CENTER_V,
+					enable_scroll: false,
+					font: ICONS_FONT,
+					show_level: NORMAL,
+				});
+			}
+
+			let fillWidget = null;
+			if (kind === "progress") {
+				fillWidget = createWidget(widget.ARC_PROGRESS, { show_level: NORMAL });
+			}
+			function applyFill(level) {
+				if (!fillWidget) return;
+				const lv = level == null ? 0 : level;
+				// start < end is required; keep a hair above 0 so a 0% badge still
+				// shows a clean (empty) track rather than an invalid arc.
+				const end = Math.max(0.5, Math.min(359.5, (360 * lv) / 100));
+				fillWidget.setProperty(prop.MORE, {
+					center_x: centerX,
+					center_y: centerY,
+					radius: COMP_RING_R,
+					start_angle: 0,
+					end_angle: end,
+					line_width: COMP_RING_W,
+					color: IVORY,
+					level: 100,
+				});
+			}
+
+			function refresh() {
+				const d = readDatum(key);
+				valueW.setProperty(prop.TEXT, d.value || "");
+				if (isDate) subW.setProperty(prop.TEXT, d.sub || "");
+				else if (key === "weather" && d.iconChar)
+					subW.setProperty(prop.TEXT, d.iconChar);
+				if (kind === "progress") applyFill(d.level);
+			}
+			refresh();
+			return { refresh };
+		}
+
+		// Complications first — BELOW the hands (created next).
+		const leftComp = makeComplication(COMP_LEFT_X, COMP_AXIS_Y, leftKey);
+		const rightComp = makeComplication(COMP_RIGHT_X, COMP_AXIS_Y, rightKey);
+
 		// ── Floating hands — firmware-driven, no JS per-tick work ────────────
 		createWidget(widget.TIME_POINTER, {
-			hour_path: HAND_HOUR.path,
+			hour_path: "hands/hour.png",
 			hour_centerX: CX,
 			hour_centerY: CY,
-			hour_posX: HAND_HOUR.posX,
-			hour_posY: HAND_HOUR.posY,
+			hour_posX: 7,
+			hour_posY: 155,
 			minute_path: theme.minute,
 			minute_centerX: CX,
 			minute_centerY: CY,
-			minute_posX: HAND_MINUTE_POS.posX,
-			minute_posY: HAND_MINUTE_POS.posY,
+			minute_posX: 5,
+			minute_posY: 205,
 			show_level: NORMAL,
 		});
 
 		// ── Digital heart — HH / MM in two rows ──────────────────────────────
+		const DIGIT_SIZE = 84;
+		const DIGIT_BOX_W = 200;
+		const DIGIT_BOX_H = 100;
+		const DIGIT_ROW_DY = 42;
 		const hoursWidget = createWidget(widget.TEXT, {
 			x: CX - DIGIT_BOX_W / 2,
 			y: CY - DIGIT_ROW_DY - DIGIT_BOX_H / 2,
@@ -191,20 +490,21 @@ WatchFace({
 			show_level: NORMAL,
 		});
 
-		// ── AOD — digital heart + white hands, minimum lit pixels ────────────
-		// Separate TIME_POINTER so the minute hand stays white in AOD instead
-		// of inheriting the theme accent (the ivory PNG doubles as white).
+		// ── AOD — digital heart + hands dimmed to match the digits ───────────
+		// Complications are intentionally NOT drawn in AOD (fewer lit pixels).
+		// Separate TIME_POINTER pointing at gray hand PNGs: TIME_POINTER can't
+		// tint at runtime, so the AOD hands are pre-baked in AOD_GRAY (0x999999).
 		createWidget(widget.TIME_POINTER, {
-			hour_path: HAND_HOUR.path,
+			hour_path: "hands/hour-aod.png",
 			hour_centerX: CX,
 			hour_centerY: CY,
-			hour_posX: HAND_HOUR.posX,
-			hour_posY: HAND_HOUR.posY,
-			minute_path: "hands/minute-ivory.png",
+			hour_posX: 7,
+			hour_posY: 155,
+			minute_path: "hands/minute-aod.png",
 			minute_centerX: CX,
 			minute_centerY: CY,
-			minute_posX: HAND_MINUTE_POS.posX,
-			minute_posY: HAND_MINUTE_POS.posY,
+			minute_posX: 5,
+			minute_posY: 205,
 			show_level: AOD,
 		});
 
@@ -245,6 +545,8 @@ WatchFace({
 			minutesWidget.setProperty(prop.TEXT, m);
 			aodHoursWidget.setProperty(prop.TEXT, h);
 			aodMinutesWidget.setProperty(prop.TEXT, m);
+			leftComp.refresh();
+			rightComp.refresh();
 		}
 
 		// App timers are suspended while the watchface is not in the foreground,
@@ -270,4 +572,12 @@ WatchFace({
 
 function pad(n) {
 	return String(n).padStart(2, "0");
+}
+
+function clampPct(x) {
+	return Math.max(0, Math.min(100, x));
+}
+
+function fmtCount(c) {
+	return c >= 1000 ? (c / 1000).toFixed(1) + "k" : String(c);
 }
