@@ -93,8 +93,8 @@ PREVIEW_MINUTE = 9
 # size renders 1:1 on every zone (matches the official ZeppOS pattern: the ring
 # image and preview equal the zone's w/h; a mismatched size renders scaled/
 # overflowing — the bug the first pass had). tips is the name-tag background.
-EDIT_ZONE = 92    # tap-zone w/h AND select/un_select ring + preview canvas
-EDIT_THUMB = 92   # edit-mode preview size = the zone (renders 1:1, no overflow)
+EDIT_ZONE = 100   # tap-zone w/h AND select/un_select ring + preview canvas
+EDIT_THUMB = 100  # edit-mode preview size = the zone (renders 1:1, no overflow)
 RING_FRAC = 0.92  # ring radius as a fraction of the zone half-width
 RING_W = 3        # ring stroke width (px at 1x) — thin and minimal
 TIPS_W = 124      # name-tag background width  (index.js tips_width)

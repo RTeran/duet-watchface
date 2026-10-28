@@ -118,10 +118,15 @@ for (let d = 0; d <= 9; d++) TEMP_DIGITS.push(TEMP_ROOT + d + ".png");
 
 // Edit-mode chrome — all four tap zones (color center, left, right, bottom) share ONE
 // size, so the select ring and the preview render 1:1 on every zone (assets in
-// tools/render-assets.py are generated at EDIT_ZONE). tips = the option-name tag.
-const EDIT_ZONE = 92;
+// tools/render-assets.py are generated at EDIT_ZONE). tips = the option-name tag
+// (TIPS_W x TIPS_H, mirrors render-assets.py). The center tag sits ABOVE its zone and
+// the left/right tags sit below theirs nudged outward, so no tag overlaps a zone or
+// another tag; tips_x/tips_y are relative to the zone's top-left (negative = above/left).
+const EDIT_ZONE = 100;
 const TIPS_W = 124;
-const TIPS_GAP = 8; // vertical gap from the zone's bottom to the name tag
+const TIPS_H = 36;
+const TIPS_GAP = 8; // vertical gap between a zone's edge and its name tag
+const TIPS_SIDE_SHIFT = 6; // keeps the left/right tags clear of the bottom zone
 
 // Catalog order is the PERSISTED CONTRACT: an option's edit type id is
 // COMP_LEFT/RIGHT/BOTTOM_BASE + its index here, so options may only be
@@ -232,7 +237,7 @@ WatchFace({
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
 			tips_x: (EDIT_ZONE - TIPS_W) / 2,
-			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_y: -(TIPS_GAP + TIPS_H),
 			tips_width: TIPS_W,
 			default_type: EDIT_COLOR_CHAMPAGNE,
 			optional_types: [
@@ -259,7 +264,7 @@ WatchFace({
 			select_image: EDIT_ROOT + "select.png",
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
-			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_x: (EDIT_ZONE - TIPS_W) / 2 - TIPS_SIDE_SHIFT,
 			tips_y: EDIT_ZONE + TIPS_GAP,
 			tips_width: TIPS_W,
 			default_type: COMP_LEFT_BASE + 0, // Date
@@ -279,7 +284,7 @@ WatchFace({
 			select_image: EDIT_ROOT + "select.png",
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
-			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_x: (EDIT_ZONE - TIPS_W) / 2 + TIPS_SIDE_SHIFT,
 			tips_y: EDIT_ZONE + TIPS_GAP,
 			tips_width: TIPS_W,
 			default_type: COMP_RIGHT_BASE + 1, // Battery
