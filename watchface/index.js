@@ -5,6 +5,7 @@ import {
 	align,
 	prop,
 	show_level,
+	data_type,
 } from "@zos/ui";
 import {
 	Time,
@@ -71,7 +72,7 @@ const COLOR_TYPE_TO_KEY = {
 };
 
 // ── Complications ────────────────────────────────────────────────────────────
-// Two circular badges on the LEFT and RIGHT, each editable to one of a shared
+// Three circular badges — LEFT, RIGHT and BOTTOM — each editable to one of a shared
 // catalog of data, or hidden. Rendered in ivory only (the accent stays exclusive
 // to the minute hand + digits). Hidden in AOD. The badge sits BELOW the hands —
 // its widgets are created before the TIME_POINTER so the hands sweep in front.
@@ -104,16 +105,31 @@ const COMP_SUB_SIZE = 13; // weekday / wordmark
 const COMP_ICON_SIZE = 17;
 const RING_CLOSED = "comp/ring-closed.png";
 const RING_TRACK = "comp/ring-track.png";
+// Bottom badge: midway between the minutes row and the baked "6".
+const COMP_BOTTOM_X = CX;
+const COMP_BOTTOM_Y = CY + 125;
 
-// Edit-mode chrome — all three tap zones (color center, left, right) share ONE
+// Weather shows the CURRENT temperature, which ZeppOS only exposes through a
+// firmware-bound TEXT_IMG (WEATHER_CURRENT), never as a readable number. Its
+// glyphs are baked by tools/render-assets.py to match the 26px value TEXT.
+const TEMP_ROOT = "comp/temp/";
+const TEMP_DIGITS = [];
+for (let d = 0; d <= 9; d++) TEMP_DIGITS.push(TEMP_ROOT + d + ".png");
+
+// Edit-mode chrome — all four tap zones (color center, left, right, bottom) share ONE
 // size, so the select ring and the preview render 1:1 on every zone (assets in
-// tools/render-assets.py are generated at EDIT_ZONE). tips = the option-name tag.
-const EDIT_ZONE = 92;
+// tools/render-assets.py are generated at EDIT_ZONE). tips = the option-name tag
+// (TIPS_W x TIPS_H, mirrors render-assets.py). The center tag sits ABOVE its zone and
+// the left/right tags sit below theirs nudged outward, so no tag overlaps a zone or
+// another tag; tips_x/tips_y are relative to the zone's top-left (negative = above/left).
+const EDIT_ZONE = 100;
 const TIPS_W = 124;
-const TIPS_GAP = 8; // vertical gap from the zone's bottom to the name tag
+const TIPS_H = 36;
+const TIPS_GAP = 8; // vertical gap between a zone's edge and its name tag
+const TIPS_SIDE_SHIFT = 6; // keeps the left/right tags clear of the bottom zone
 
 // Catalog order is the PERSISTED CONTRACT: an option's edit type id is
-// COMP_LEFT_BASE / COMP_RIGHT_BASE + its index here, so options may only be
+// COMP_LEFT/RIGHT/BOTTOM_BASE + its index here, so options may only be
 // APPENDED, never reordered (a reorder would silently repoint saved selections).
 const COMP_OPTIONS = [
 	{ datum: "date", title: "Date" },
@@ -127,11 +143,13 @@ const COMP_OPTIONS = [
 ];
 const COMP_LEFT_BASE = 0x186a8; // color ids occupy 0x186a0–0x186a7
 const COMP_RIGHT_BASE = 0x186b0;
+const COMP_BOTTOM_BASE = 0x186b8;
 
 const TYPE_TO_DATUM = {};
 for (let i = 0; i < COMP_OPTIONS.length; i++) {
 	TYPE_TO_DATUM[COMP_LEFT_BASE + i] = COMP_OPTIONS[i].datum;
 	TYPE_TO_DATUM[COMP_RIGHT_BASE + i] = COMP_OPTIONS[i].datum;
+	TYPE_TO_DATUM[COMP_BOTTOM_BASE + i] = COMP_OPTIONS[i].datum;
 }
 
 // `kind` picks the ring: progress = gray track PNG + live ARC_PROGRESS fill;
@@ -185,7 +203,7 @@ WatchFace({
 			show_level: NORMAL,
 		});
 
-		// ── Edit mode — masks + three tap zones (color center, left, right) ──
+		// ── Edit mode — masks + four tap zones (color, left, right, bottom) ──
 		// Both masks are firmware-mandated (the edit-exit crashes without them).
 		// WATCHFACE_EDIT_MASK sits BELOW the edit groups: its dark veil dims the
 		// live dial so the (opaque) preview thumbnails + name tags stand out on
@@ -219,7 +237,7 @@ WatchFace({
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
 			tips_x: (EDIT_ZONE - TIPS_W) / 2,
-			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_y: -(TIPS_GAP + TIPS_H),
 			tips_width: TIPS_W,
 			default_type: EDIT_COLOR_CHAMPAGNE,
 			optional_types: [
@@ -235,7 +253,7 @@ WatchFace({
 			count: 8,
 		});
 
-		// Left + right complication zones. Both offer the same catalog (shared
+		// Left, right + bottom complication zones. All offer the same catalog (shared
 		// previews); only the defaults differ. Type ids are base + option index.
 		const leftEditGroup = createWidget(widget.WATCHFACE_EDIT_GROUP, {
 			edit_id: 2,
@@ -246,7 +264,7 @@ WatchFace({
 			select_image: EDIT_ROOT + "select.png",
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
-			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_x: (EDIT_ZONE - TIPS_W) / 2 - TIPS_SIDE_SHIFT,
 			tips_y: EDIT_ZONE + TIPS_GAP,
 			tips_width: TIPS_W,
 			default_type: COMP_LEFT_BASE + 0, // Date
@@ -266,12 +284,32 @@ WatchFace({
 			select_image: EDIT_ROOT + "select.png",
 			un_select_image: EDIT_ROOT + "un_select.png",
 			tips_BG: EDIT_ROOT + "tips.png",
-			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_x: (EDIT_ZONE - TIPS_W) / 2 + TIPS_SIDE_SHIFT,
 			tips_y: EDIT_ZONE + TIPS_GAP,
 			tips_width: TIPS_W,
 			default_type: COMP_RIGHT_BASE + 1, // Battery
 			optional_types: COMP_OPTIONS.map((o, i) => ({
 				type: COMP_RIGHT_BASE + i,
+				preview: EDIT_ROOT + "preview-comp-" + o.datum + ".png",
+				title_en: o.title,
+			})),
+			count: COMP_OPTIONS.length,
+		});
+		const bottomEditGroup = createWidget(widget.WATCHFACE_EDIT_GROUP, {
+			edit_id: 4,
+			x: COMP_BOTTOM_X - EDIT_ZONE / 2,
+			y: COMP_BOTTOM_Y - EDIT_ZONE / 2,
+			w: EDIT_ZONE,
+			h: EDIT_ZONE,
+			select_image: EDIT_ROOT + "select.png",
+			un_select_image: EDIT_ROOT + "un_select.png",
+			tips_BG: EDIT_ROOT + "tips.png",
+			tips_x: (EDIT_ZONE - TIPS_W) / 2,
+			tips_y: EDIT_ZONE + TIPS_GAP,
+			tips_width: TIPS_W,
+			default_type: COMP_BOTTOM_BASE + 5, // Weather
+			optional_types: COMP_OPTIONS.map((o, i) => ({
+				type: COMP_BOTTOM_BASE + i,
 				preview: EDIT_ROOT + "preview-comp-" + o.datum + ".png",
 				title_en: o.title,
 			})),
@@ -288,8 +326,11 @@ WatchFace({
 			leftEditGroup.getProperty(prop.CURRENT_TYPE) || COMP_LEFT_BASE + 0;
 		const rightType =
 			rightEditGroup.getProperty(prop.CURRENT_TYPE) || COMP_RIGHT_BASE + 1;
+		const bottomType =
+			bottomEditGroup.getProperty(prop.CURRENT_TYPE) || COMP_BOTTOM_BASE + 5;
 		const leftKey = TYPE_TO_DATUM[leftType] || "date";
 		const rightKey = TYPE_TO_DATUM[rightType] || "battery";
+		const bottomKey = TYPE_TO_DATUM[bottomType] || "weather";
 
 		// ── Data readers ─────────────────────────────────────────────────────
 		function readDatum(key) {
@@ -318,10 +359,7 @@ WatchFace({
 					case "weather": {
 						const d0 = weather.getForecastWeather().forecastData.data[0];
 						const b = WEATHER_INDEX_TO_BUCKET[d0.index];
-						return {
-							value: typeof d0.high === "number" ? String(d0.high) + "\u00b0" : "--",
-							iconChar: WEATHER_CHARS[b === undefined ? 0 : b],
-						};
+						return { iconChar: WEATHER_CHARS[b === undefined ? 0 : b] };
 					}
 					case "pai": {
 						const v = pai ? pai.getTotal() || 0 : 0;
@@ -353,20 +391,38 @@ WatchFace({
 				show_level: NORMAL,
 			});
 
-			const valueW = createWidget(widget.TEXT, {
-				x: centerX - COMP_BOX_W / 2,
-				y: centerY - 22,
-				w: COMP_BOX_W,
-				h: 30,
-				color: IVORY,
-				text: "",
-				text_size: COMP_VALUE_SIZE,
-				align_h: align.CENTER_H,
-				align_v: align.CENTER_V,
-				enable_scroll: false,
-				font: FONT,
-				show_level: NORMAL,
-			});
+			// Weather's value is updated by the firmware, so it has no JS handle.
+			let valueW = null;
+			if (key === "weather") {
+				createWidget(widget.TEXT_IMG, {
+					x: centerX - COMP_BOX_W / 2,
+					y: centerY - 22,
+					w: COMP_BOX_W,
+					h: 30,
+					font_array: TEMP_DIGITS,
+					unit_en: TEMP_ROOT + "deg.png",
+					negative_image: TEMP_ROOT + "minus.png",
+					type: data_type.WEATHER_CURRENT,
+					h_space: 0,
+					align_h: align.CENTER_H,
+					show_level: NORMAL,
+				});
+			} else {
+				valueW = createWidget(widget.TEXT, {
+					x: centerX - COMP_BOX_W / 2,
+					y: centerY - 22,
+					w: COMP_BOX_W,
+					h: 30,
+					color: IVORY,
+					text: "",
+					text_size: COMP_VALUE_SIZE,
+					align_h: align.CENTER_H,
+					align_v: align.CENTER_V,
+					enable_scroll: false,
+					font: FONT,
+					show_level: NORMAL,
+				});
+			}
 
 			// Identifier line: weekday (date) · wordmark (pai) · icon glyph (rest).
 			let subW = null;
@@ -426,7 +482,7 @@ WatchFace({
 
 			function refresh() {
 				const d = readDatum(key);
-				valueW.setProperty(prop.TEXT, d.value || "");
+				if (valueW) valueW.setProperty(prop.TEXT, d.value || "");
 				if (isDate) subW.setProperty(prop.TEXT, d.sub || "");
 				else if (key === "weather" && d.iconChar)
 					subW.setProperty(prop.TEXT, d.iconChar);
@@ -439,6 +495,7 @@ WatchFace({
 		// Complications first — BELOW the hands (created next).
 		const leftComp = makeComplication(COMP_LEFT_X, COMP_AXIS_Y, leftKey);
 		const rightComp = makeComplication(COMP_RIGHT_X, COMP_AXIS_Y, rightKey);
+		const bottomComp = makeComplication(COMP_BOTTOM_X, COMP_BOTTOM_Y, bottomKey);
 
 		// ── Floating hands — firmware-driven, no JS per-tick work ────────────
 		createWidget(widget.TIME_POINTER, {
@@ -547,6 +604,7 @@ WatchFace({
 			aodMinutesWidget.setProperty(prop.TEXT, m);
 			leftComp.refresh();
 			rightComp.refresh();
+			bottomComp.refresh();
 		}
 
 		// App timers are suspended while the watchface is not in the foreground,

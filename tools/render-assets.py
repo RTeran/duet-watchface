@@ -14,6 +14,8 @@ Renders every image asset of the Duet watchface into both device targets:
   edit/select.png / un_select.png  the selection ring drawn on the editable zone
   edit/mask100.png / mask70.png    firmware-mandated edit masks, kept fully
                                    transparent so the dial stays crisp in edit mode
+  comp/temp/<0-9|minus|deg>.png    glyph strip for the weather badge's TEXT_IMG
+                                   (WEATHER_CURRENT), baked from Jost Light
 
 The accent color (minute hand + digital digits) is the only thing that varies
 between themes; the hour hand and the dial numerals stay ivory. Because
@@ -91,8 +93,8 @@ PREVIEW_MINUTE = 9
 # size renders 1:1 on every zone (matches the official ZeppOS pattern: the ring
 # image and preview equal the zone's w/h; a mismatched size renders scaled/
 # overflowing — the bug the first pass had). tips is the name-tag background.
-EDIT_ZONE = 92    # tap-zone w/h AND select/un_select ring + preview canvas
-EDIT_THUMB = 92   # edit-mode preview size = the zone (renders 1:1, no overflow)
+EDIT_ZONE = 100   # tap-zone w/h AND select/un_select ring + preview canvas
+EDIT_THUMB = 100  # edit-mode preview size = the zone (renders 1:1, no overflow)
 RING_FRAC = 0.92  # ring radius as a fraction of the zone half-width
 RING_W = 3        # ring stroke width (px at 1x) — thin and minimal
 TIPS_W = 124      # name-tag background width  (index.js tips_width)
@@ -105,7 +107,7 @@ TIPS_H = 36       # name-tag background height
 MASK_BG_ALPHA = 210   # WATCHFACE_EDIT_MASK — near-opaque black, dims the dial only
 MASK_FG_ALPHA = 0     # WATCHFACE_EDIT_FG_MASK — transparent; a veil here dims the edit UI
 
-# Complications — two circular badges (top y=108, bottom y=358 in index.js). The
+# Complications — three circular badges (left, right, bottom in index.js). The
 # ring is baked here as a PNG (crisp, reliable) for both the closed border and the
 # gray progress track; index.js overlays the live progress fill with ARC_PROGRESS.
 # COMP_RING_CENTER_R MUST equal the ARC_PROGRESS `radius` in index.js so the fill
@@ -115,7 +117,16 @@ COMP_RING_W = 3                                # ring stroke width
 COMP_RING_CENTER_R = COMP_R_OUTER - COMP_RING_W / 2  # 29.5 — ring centerline
 TRACK_GRAY = (67, 64, 58, 255)                 # #43403a — progress track under the ivory fill
 
-# Edit-mode preview thumbnails, one per datum (shared by the top & bottom groups).
+# Weather badge temperature: the current temperature is only reachable through a
+# firmware-bound TEXT_IMG, which draws PNG glyphs instead of the TTF. Each glyph is
+# baked at the badge value's TEXT size on a canvas exactly as tall as that TEXT's
+# box, with the baseline where CENTER_V puts it, so the TEXT_IMG lines up with the
+# TTF values of the other badges. Widths follow the glyph advance (h_space 0).
+COMP_VALUE_SIZE = 26   # index.js COMP_VALUE_SIZE
+COMP_VALUE_BOX_H = 30  # index.js value TEXT `h`
+TEMP_GLYPHS = [(str(d), str(d)) for d in range(10)] + [("-", "minus"), ("\u00b0", "deg")]
+
+# Edit-mode preview thumbnails, one per datum (shared by all three badge groups).
 # Tuple: (datum, kind, value, sub, icon_char, level%). `sub` is stacked text
 # (weekday / wordmark); `icon_char` is a glyph from icons-outlined.ttf.
 COMP_PREVIEW_SPECS = [
@@ -320,6 +331,19 @@ def render_comp_preview(kind, value, sub, icon_char, level):
     return img.resize((EDIT_THUMB, EDIT_THUMB), Image.LANCZOS)
 
 
+def render_temp_glyph(ch):
+    """One TEXT_IMG glyph: advance-wide (widened if the ink overhangs), box-tall,
+    drawn with the same vertical-middle anchor the badge TEXT is centered by."""
+    font = ImageFont.truetype(DIGIT_FONT_PATH, COMP_VALUE_SIZE)
+    mid = COMP_VALUE_BOX_H / 2
+    left, _, right, _ = font.getbbox(ch, anchor="lm")
+    x0 = min(0, left)
+    w = max(math.ceil(font.getlength(ch)), right) - x0
+    img = Image.new("RGBA", (w, COMP_VALUE_BOX_H), (0, 0, 0, 0))
+    ImageDraw.Draw(img).text((-x0, mid), ch, font=font, fill=IVORY, anchor="lm")
+    return img
+
+
 def main():
     background = render_background()
     # Hour hand stays ivory across every theme.
@@ -356,6 +380,7 @@ def main():
     # the top and bottom edit groups, since both offer the same catalog).
     comp_ring_closed = render_comp_ring(IVORY)
     comp_ring_track = render_comp_ring(TRACK_GRAY)
+    temp_glyphs = {name: render_temp_glyph(ch) for ch, name in TEMP_GLYPHS}
     comp_previews = {
         datum: render_comp_preview(kind, value, sub, icon, level)
         for (datum, kind, value, sub, icon, level) in COMP_PREVIEW_SPECS
@@ -366,7 +391,7 @@ def main():
         os.makedirs(os.path.join(root, "hands"), exist_ok=True)
         os.makedirs(os.path.join(root, "images"), exist_ok=True)
         os.makedirs(os.path.join(root, "edit"), exist_ok=True)
-        os.makedirs(os.path.join(root, "comp"), exist_ok=True)
+        os.makedirs(os.path.join(root, "comp", "temp"), exist_ok=True)
 
         background.save(os.path.join(root, "background.png"))
         hour_hand[0].save(os.path.join(root, "hands", "hour.png"))
@@ -388,6 +413,8 @@ def main():
 
         comp_ring_closed.save(os.path.join(root, "comp", "ring-closed.png"))
         comp_ring_track.save(os.path.join(root, "comp", "ring-track.png"))
+        for name, glyph in temp_glyphs.items():
+            glyph.save(os.path.join(root, "comp", "temp", f"{name}.png"))
         for datum, thumb in comp_previews.items():
             thumb.save(os.path.join(root, "edit", f"preview-comp-{datum}.png"))
 
