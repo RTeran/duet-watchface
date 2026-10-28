@@ -112,9 +112,9 @@ MASK_FG_ALPHA = 0     # WATCHFACE_EDIT_FG_MASK — transparent; a veil here dims
 # gray progress track; index.js overlays the live progress fill with ARC_PROGRESS.
 # COMP_RING_CENTER_R MUST equal the ARC_PROGRESS `radius` in index.js so the fill
 # sits exactly on the baked track.
-COMP_R_OUTER = 31                              # badge radius → 62px PNG
+COMP_R_OUTER = 34                              # badge radius → 68px PNG
 COMP_RING_W = 3                                # ring stroke width
-COMP_RING_CENTER_R = COMP_R_OUTER - COMP_RING_W / 2  # 29.5 — ring centerline
+COMP_RING_CENTER_R = COMP_R_OUTER - COMP_RING_W / 2  # 32.5 — ring centerline
 TRACK_GRAY = (67, 64, 58, 255)                 # #43403a — progress track under the ivory fill
 
 # Weather badge temperature: the current temperature is only reachable through a
@@ -122,8 +122,8 @@ TRACK_GRAY = (67, 64, 58, 255)                 # #43403a — progress track unde
 # baked at the badge value's TEXT size on a canvas exactly as tall as that TEXT's
 # box, with the baseline where CENTER_V puts it, so the TEXT_IMG lines up with the
 # TTF values of the other badges. Widths follow the glyph advance (h_space 0).
-COMP_VALUE_SIZE = 26   # index.js COMP_VALUE_SIZE
-COMP_VALUE_BOX_H = 30  # index.js value TEXT `h`
+COMP_VALUE_SIZE = 28   # index.js COMP_VALUE_SIZE
+COMP_VALUE_BOX_H = 33  # index.js value TEXT `h`
 TEMP_GLYPHS = [(str(d), str(d)) for d in range(10)] + [("-", "minus"), ("\u00b0", "deg")]
 
 # Edit-mode preview thumbnails, one per datum (shared by all three badge groups).
@@ -272,7 +272,7 @@ def minute_hand_name(key):
 
 
 def render_comp_ring(color):
-    """A 62px badge ring (annulus) in `color`: the closed ivory border, or the
+    """A 68px badge ring (annulus) in `color`: the closed ivory border, or the
     gray progress track over which index.js draws the ARC_PROGRESS fill."""
     n = COMP_R_OUTER * 2
     img = Image.new("RGBA", (n * S, n * S), (0, 0, 0, 0))
