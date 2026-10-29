@@ -83,7 +83,7 @@ const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 // Weather condition glyphs from icons-outlined.ttf, one per bucket.
 // Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
 const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\uf1ad", "\ueb3b", "\uebdb"];
-// getForecastWeather().forecastData.data[0].index (0–28) → bucket. Index meanings
+// getForecast().forecastData.data[0].index (0–28) → bucket. Index meanings
 // per the ZeppOS Weather docs; night variants fold into their daytime bucket.
 const WEATHER_INDEX_TO_BUCKET = {
 	0: 1, 1: 3, 2: 4, 3: 0, 4: 2, 5: 3, 6: 4, 7: 3, 8: 4, 9: 4,
@@ -96,13 +96,13 @@ const WEATHER_INDEX_TO_BUCKET = {
 const COMP_AXIS_Y = CY;
 const COMP_LEFT_X = 120;
 const COMP_RIGHT_X = 346;
-const COMP_R = 31; // badge radius → the ring PNG is 62×62
-const COMP_RING_R = 29.5; // ARC_PROGRESS radius — MUST equal COMP_RING_CENTER_R in render-assets.py
+const COMP_R = 34; // badge radius → the ring PNG is 68×68
+const COMP_RING_R = 32.5; // ARC_PROGRESS radius — MUST equal COMP_RING_CENTER_R in render-assets.py
 const COMP_RING_W = 3;
-const COMP_BOX_W = 62;
-const COMP_VALUE_SIZE = 26;
-const COMP_SUB_SIZE = 13; // weekday / wordmark
-const COMP_ICON_SIZE = 17;
+const COMP_BOX_W = 68;
+const COMP_VALUE_SIZE = 28;
+const COMP_SUB_SIZE = 14; // weekday / wordmark
+const COMP_ICON_SIZE = 18;
 const RING_CLOSED = "comp/ring-closed.png";
 const RING_TRACK = "comp/ring-track.png";
 // Bottom badge: midway between the minutes row and the baked "6".
@@ -111,7 +111,7 @@ const COMP_BOTTOM_Y = CY + 125;
 
 // Weather shows the CURRENT temperature, which ZeppOS only exposes through a
 // firmware-bound TEXT_IMG (WEATHER_CURRENT), never as a readable number. Its
-// glyphs are baked by tools/render-assets.py to match the 26px value TEXT.
+// glyphs are baked by tools/render-assets.py to match the 28px value TEXT.
 const TEMP_ROOT = "comp/temp/";
 const TEMP_DIGITS = [];
 for (let d = 0; d <= 9; d++) TEMP_DIGITS.push(TEMP_ROOT + d + ".png");
@@ -357,7 +357,9 @@ WatchFace({
 						return { value: v ? String(v) : "--" };
 					}
 					case "weather": {
-						const d0 = weather.getForecastWeather().forecastData.data[0];
+						// Active 2 firmware only has getForecast(); older ones only the legacy name.
+						const d0 = (weather.getForecast || weather.getForecastWeather).call(weather)
+							.forecastData.data[0];
 						const b = WEATHER_INDEX_TO_BUCKET[d0.index];
 						return { iconChar: WEATHER_CHARS[b === undefined ? 0 : b] };
 					}
@@ -387,6 +389,9 @@ WatchFace({
 			createWidget(widget.IMG, {
 				x: centerX - COMP_R,
 				y: centerY - COMP_R,
+				// Explicit size: the simulator kept the old 62px bounds of the ring PNG after it grew.
+				w: COMP_R * 2,
+				h: COMP_R * 2,
 				src: kind === "progress" ? RING_TRACK : RING_CLOSED,
 				show_level: NORMAL,
 			});
@@ -396,12 +401,19 @@ WatchFace({
 			if (key === "weather") {
 				createWidget(widget.TEXT_IMG, {
 					x: centerX - COMP_BOX_W / 2,
-					y: centerY - 22,
+					y: centerY - 24,
 					w: COMP_BOX_W,
-					h: 30,
+					h: 33,
 					font_array: TEMP_DIGITS,
+					unit_sc: TEMP_ROOT + "deg.png",
+					unit_tc: TEMP_ROOT + "deg.png",
 					unit_en: TEMP_ROOT + "deg.png",
+					imperial_unit_sc: TEMP_ROOT + "deg.png",
+					imperial_unit_tc: TEMP_ROOT + "deg.png",
+					imperial_unit_en: TEMP_ROOT + "deg.png",
 					negative_image: TEMP_ROOT + "minus.png",
+					// Without it, "no weather data" renders as a bare "0" (the unit is dropped).
+					invalid_image: TEMP_ROOT + "minus.png",
 					type: data_type.WEATHER_CURRENT,
 					h_space: 0,
 					align_h: align.CENTER_H,
@@ -410,9 +422,9 @@ WatchFace({
 			} else {
 				valueW = createWidget(widget.TEXT, {
 					x: centerX - COMP_BOX_W / 2,
-					y: centerY - 22,
+					y: centerY - 24,
 					w: COMP_BOX_W,
-					h: 30,
+					h: 33,
 					color: IVORY,
 					text: "",
 					text_size: COMP_VALUE_SIZE,
@@ -431,7 +443,7 @@ WatchFace({
 					x: centerX - COMP_BOX_W / 2,
 					y: centerY + 3,
 					w: COMP_BOX_W,
-					h: 20,
+					h: 22,
 					color: IVORY,
 					text: isPai ? "PAI" : "",
 					text_size: COMP_SUB_SIZE,
@@ -446,7 +458,7 @@ WatchFace({
 					x: centerX - COMP_BOX_W / 2,
 					y: centerY + 2,
 					w: COMP_BOX_W,
-					h: 22,
+					h: 24,
 					color: IVORY,
 					text: DATUM_ICON[key] || "",
 					text_size: COMP_ICON_SIZE,
