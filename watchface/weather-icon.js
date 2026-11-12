@@ -1,6 +1,7 @@
-// Weather condition glyphs from icons-outlined.ttf, one per bucket.
+// Weather condition glyphs from icons-outlined.ttf (Material Symbols, re-mapped
+// below U+F000 by tools/make-icon-font.py), one per bucket.
 // Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
-export const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\ue1ad", "\ueb3b", "\uebdb"];
+export const WEATHER_CHARS = ["\ue81a", "\ue172", "\ue15c", "\ue176", "\ue2cd", "\uebdb"];
 
 const UNKNOWN_INDEX = 25;
 
