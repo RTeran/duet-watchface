@@ -12,6 +12,10 @@ Glyphs (classic Material Icons codepoints, kept as the runtime chars in index.js
     weather  e430 wb_sunny · e42d wb_cloudy · e2bd cloud
              f1ad umbrella · eb3b ac_unit   · ebdb thunderstorm
 
+umbrella is re-mapped to e1ad (see CODEPOINT_REMAP): at f1ad it drew blank on
+the Active 2 and in the simulator, while the same outline at a lower codepoint
+drew fine.
+
 Run:  pip install fonttools  &&  python3 tools/make-icon-font.py
 Only needs re-running when the glyph set changes; the output is committed.
 """
@@ -37,6 +41,7 @@ OUTPUTS = [
     os.path.join(BASE, "..", "assets", "466x466-amazfit-gtr-4", "fonts", "icons-outlined.ttf"),
     os.path.join(BASE, "fonts", "icons-outlined.ttf"),  # source copy for render-assets.py previews
 ]
+CODEPOINT_REMAP = {0xF1AD: 0xE1AD}
 MAX_ERR = 1.0  # cu2qu cubic→quadratic error, in 1000-upm font units (sub-pixel)
 
 
@@ -110,12 +115,20 @@ def recenter_glyphs_h(font):
     return font
 
 
+def remap_codepoints(font, remap):
+    for table in font["cmap"].tables:
+        if table.isUnicode():
+            for old, new in remap.items():
+                table.cmap[new] = table.cmap.pop(old)
+    return font
+
+
 def main():
     if not os.path.exists(SRC):
         print(f"downloading {SRC_URL}")
         urllib.request.urlretrieve(SRC_URL, SRC)
 
-    font = recenter_glyphs_h(otf_to_ttf(subset_otf(SRC, UNICODES)))
+    font = remap_codepoints(recenter_glyphs_h(otf_to_ttf(subset_otf(SRC, UNICODES))), CODEPOINT_REMAP)
 
     buf = io.BytesIO()
     font.save(buf)
@@ -123,7 +136,8 @@ def main():
     out = TTFont(buf)
     cmap = out.getBestCmap()
     assert "glyf" in out and out.sfntVersion == "\x00\x01\x00\x00", "not a glyf TTF"
-    missing = [hex(u) for u in UNICODES if u not in cmap]
+    expected = [CODEPOINT_REMAP.get(u, u) for u in UNICODES]
+    missing = [hex(u) for u in expected if u not in cmap]
     assert not missing, f"missing glyphs: {missing}"
     print(f"OK: glyf TTF, {len(cmap)} glyphs")
 

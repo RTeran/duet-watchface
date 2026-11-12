@@ -1,6 +1,6 @@
 // Weather condition glyphs from icons-outlined.ttf, one per bucket.
 // Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
-export const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\uf1ad", "\ueb3b", "\uebdb"];
+export const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\ue1ad", "\ueb3b", "\uebdb"];
 
 const UNKNOWN_INDEX = 25;
 
