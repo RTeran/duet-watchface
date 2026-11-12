@@ -16,7 +16,7 @@ import {
 	Pai,
 	Weather,
 } from "@zos/sensor";
-import { readWeatherIcon } from "./weather-icon.js";
+import { createChangeLogger, readWeatherIcon } from "./weather-icon.js";
 
 // Trial: Jost Light (OFL) on both layers — the same face the dial numerals are
 // baked with, so analog and digital speak with one geometric voice. Swap back
@@ -326,6 +326,10 @@ WatchFace({
 		const bottomKey = TYPE_TO_DATUM[bottomType] || "weather";
 
 		// ── Data readers ─────────────────────────────────────────────────────
+		const weatherErrors = createChangeLogger((msg) =>
+			console.log("[duet] no weather icon: " + msg),
+		);
+
 		function readDatum(key) {
 			try {
 				switch (key) {
@@ -349,12 +353,11 @@ WatchFace({
 						const v = heart && (heart.getLast() || heart.getCurrent());
 						return { value: v ? String(v) : "--" };
 					}
-					case "weather":
-						return {
-							iconChar: readWeatherIcon(weather, (e) =>
-								console.log("[duet] weather read failed: " + e),
-							),
-						};
+					case "weather": {
+						const iconChar = readWeatherIcon(weather, weatherErrors.report);
+						if (iconChar) weatherErrors.reset();
+						return { iconChar };
+					}
 					case "pai": {
 						const v = pai ? pai.getTotal() || 0 : 0;
 						return { value: String(v), level: clampPct(v) };
@@ -390,7 +393,8 @@ WatchFace({
 
 			// Weather's value is updated by the firmware, so its text can't be set from
 			// JS. Two identical copies (above the icon / centered in the badge) are
-			// toggled instead of moved, so neither is ever recreated above the hands.
+			// toggled with VISIBLE: verified in the simulator, whereas moving a
+			// firmware-bound TEXT_IMG via setProperty is untested.
 			let valueW = null;
 			let tempTopW = null;
 			let tempCenteredW = null;
