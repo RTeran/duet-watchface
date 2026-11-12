@@ -5,8 +5,8 @@
 		"appName": "Duet",
 		"appType": "watchface",
 		"version": {
-			"code": 3,
-			"name": "1.1.1"
+			"code": 4,
+			"name": "1.1.2"
 		},
 		"vender": "RTerán",
 		"description": "Duet watchface — floating hands and a digital heart. For Amazfit Active 2 Round & GTR 4",
