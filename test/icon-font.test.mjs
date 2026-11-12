@@ -6,6 +6,7 @@ import { WEATHER_CHARS } from "../watchface/weather-icon.js";
 const FONTS = [
 	"assets/466x466-amazfit-active-2-round/fonts/icons-outlined.ttf",
 	"assets/466x466-amazfit-gtr-4/fonts/icons-outlined.ttf",
+	"tools/fonts/icons-outlined.ttf",
 ];
 
 function readCmapFormat4(path) {
@@ -42,11 +43,13 @@ test("every weather glyph is in the bundled icon fonts", () => {
 	}
 });
 
-// U+F1AD drew blank in the icon font on the Active 2 and in the simulator, while
-// the same outline mapped to U+E001 drew fine. Only F1AD is verified; the whole
-// U+F000+ block is kept out as a precaution.
-test("weather glyphs avoid the U+F000+ block that draws blank on device", () => {
-	for (const ch of WEATHER_CHARS) {
-		assert.ok(ch.codePointAt(0) < 0xf000, `U+${ch.codePointAt(0).toString(16)}`);
+// At U+F1AD the umbrella drew blank on the Active 2 and in the simulator; the same
+// outline drew fine at a lower codepoint. Only F1AD was verified, so the whole
+// U+F000+ block is kept out of the font as a precaution.
+test("no icon font maps a codepoint in the U+F000+ block", () => {
+	for (const path of FONTS) {
+		for (const cp of readCmapFormat4(path)) {
+			assert.ok(cp < 0xf000, `${path} maps U+${cp.toString(16)}`);
+		}
 	}
 });

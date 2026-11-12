@@ -6,7 +6,8 @@ Outlined" subset to the ten glyphs Duet needs and, crucially, converted from CFF
 (the .otf Google ships) to glyf outlines — ZeppOS renders glyf TTFs (sfntVersion
 0x00010000); a CFF-flavoured .ttf shows nothing on device.
 
-Glyphs (classic Material Icons codepoints, kept as the runtime chars in index.js):
+Glyphs (classic Material Icons codepoints; the runtime chars live in
+watchface/index.js for data and watchface/weather-icon.js for weather):
     data     e536 directions_walk · ef55 local_fire_department
              e1a4 battery_full     · e87d favorite
     weather  e430 wb_sunny · e42d wb_cloudy · e2bd cloud
