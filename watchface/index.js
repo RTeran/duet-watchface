@@ -105,6 +105,9 @@ const COMP_BOTTOM_Y = CY + 125;
 const TEMP_ROOT = "comp/temp/";
 const TEMP_DIGITS = [];
 for (let d = 0; d <= 9; d++) TEMP_DIGITS.push(TEMP_ROOT + d + ".png");
+const TEMP_H = 33;
+// Digit ink spans rows 7–25 of the 33px glyph PNGs, so its visual center is row 16.
+const TEMP_INK_CENTER = 16;
 
 // Edit-mode chrome — all four tap zones (color center, left, right, bottom) share ONE
 // size, so the select ring and the preview render 1:1 on every zone (assets in
@@ -385,29 +388,36 @@ WatchFace({
 				show_level: NORMAL,
 			});
 
-			// Weather's value is updated by the firmware, so it has no JS handle.
+			// Weather's value is updated by the firmware, so its text can't be set from
+			// JS. Two identical copies (above the icon / centered in the badge) are
+			// toggled instead of moved, so neither is ever recreated above the hands.
 			let valueW = null;
+			let tempTopW = null;
+			let tempCenteredW = null;
 			if (key === "weather") {
-				createWidget(widget.TEXT_IMG, {
-					x: centerX - COMP_BOX_W / 2,
-					y: centerY - 24,
-					w: COMP_BOX_W,
-					h: 33,
-					font_array: TEMP_DIGITS,
-					unit_sc: TEMP_ROOT + "deg.png",
-					unit_tc: TEMP_ROOT + "deg.png",
-					unit_en: TEMP_ROOT + "deg.png",
-					imperial_unit_sc: TEMP_ROOT + "deg.png",
-					imperial_unit_tc: TEMP_ROOT + "deg.png",
-					imperial_unit_en: TEMP_ROOT + "deg.png",
-					negative_image: TEMP_ROOT + "minus.png",
-					// Without it, "no weather data" renders as a bare "0" (the unit is dropped).
-					invalid_image: TEMP_ROOT + "minus.png",
-					type: data_type.WEATHER_CURRENT,
-					h_space: 0,
-					align_h: align.CENTER_H,
-					show_level: NORMAL,
-				});
+				const tempWidget = (y) =>
+					createWidget(widget.TEXT_IMG, {
+						x: centerX - COMP_BOX_W / 2,
+						y,
+						w: COMP_BOX_W,
+						h: TEMP_H,
+						font_array: TEMP_DIGITS,
+						unit_sc: TEMP_ROOT + "deg.png",
+						unit_tc: TEMP_ROOT + "deg.png",
+						unit_en: TEMP_ROOT + "deg.png",
+						imperial_unit_sc: TEMP_ROOT + "deg.png",
+						imperial_unit_tc: TEMP_ROOT + "deg.png",
+						imperial_unit_en: TEMP_ROOT + "deg.png",
+						negative_image: TEMP_ROOT + "minus.png",
+						// Without it, "no weather data" renders as a bare "0" (the unit is dropped).
+						invalid_image: TEMP_ROOT + "minus.png",
+						type: data_type.WEATHER_CURRENT,
+						h_space: 0,
+						align_h: align.CENTER_H,
+						show_level: NORMAL,
+					});
+				tempTopW = tempWidget(centerY - 24);
+				tempCenteredW = tempWidget(centerY - TEMP_INK_CENTER);
 			} else {
 				valueW = createWidget(widget.TEXT, {
 					x: centerX - COMP_BOX_W / 2,
@@ -485,7 +495,12 @@ WatchFace({
 				const d = readDatum(key);
 				if (valueW) valueW.setProperty(prop.TEXT, d.value || "");
 				if (isDate) subW.setProperty(prop.TEXT, d.sub || "");
-				else if (key === "weather") subW.setProperty(prop.TEXT, d.iconChar || "");
+				else if (key === "weather") {
+					const hasIcon = !!d.iconChar;
+					subW.setProperty(prop.TEXT, d.iconChar || "");
+					tempTopW.setProperty(prop.VISIBLE, hasIcon);
+					tempCenteredW.setProperty(prop.VISIBLE, !hasIcon);
+				}
 				if (kind === "progress") applyFill(d.level);
 			}
 			refresh();
