@@ -16,6 +16,7 @@ import {
 	Pai,
 	Weather,
 } from "@zos/sensor";
+import { readWeatherIcon } from "./weather-icon.js";
 
 // Trial: Jost Light (OFL) on both layers — the same face the dial numerals are
 // baked with, so analog and digital speak with one geometric voice. Swap back
@@ -79,17 +80,6 @@ const COLOR_TYPE_TO_KEY = {
 
 // Zepp OS Time.getDay() is 1 (Mon) … 7 (Sun); index with getDay() - 1.
 const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-
-// Weather condition glyphs from icons-outlined.ttf, one per bucket.
-// Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
-const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\uf1ad", "\ueb3b", "\uebdb"];
-// getForecast().forecastData.data[0].index (0–28) → bucket. Index meanings
-// per the ZeppOS Weather docs; night variants fold into their daytime bucket.
-const WEATHER_INDEX_TO_BUCKET = {
-	0: 1, 1: 3, 2: 4, 3: 0, 4: 2, 5: 3, 6: 4, 7: 3, 8: 4, 9: 4,
-	10: 3, 11: 2, 12: 4, 13: 2, 14: 2, 15: 5, 16: 4, 17: 2, 18: 5, 19: 5,
-	20: 5, 21: 5, 22: 2, 23: 2, 24: 5, 25: 0, 26: 1, 27: 3, 28: 0,
-};
 
 // Badge geometry — both on the horizontal centerline, equidistant between the
 // dial numerals (3 & 9) and the digital heart. Symmetric about CX.
@@ -356,13 +346,12 @@ WatchFace({
 						const v = heart && (heart.getLast() || heart.getCurrent());
 						return { value: v ? String(v) : "--" };
 					}
-					case "weather": {
-						// Active 2 firmware only has getForecast(); older ones only the legacy name.
-						const d0 = (weather.getForecast || weather.getForecastWeather).call(weather)
-							.forecastData.data[0];
-						const b = WEATHER_INDEX_TO_BUCKET[d0.index];
-						return { iconChar: WEATHER_CHARS[b === undefined ? 0 : b] };
-					}
+					case "weather":
+						return {
+							iconChar: readWeatherIcon(weather, (e) =>
+								console.log("[duet] weather read failed: " + e),
+							),
+						};
 					case "pai": {
 						const v = pai ? pai.getTotal() || 0 : 0;
 						return { value: String(v), level: clampPct(v) };
@@ -496,8 +485,7 @@ WatchFace({
 				const d = readDatum(key);
 				if (valueW) valueW.setProperty(prop.TEXT, d.value || "");
 				if (isDate) subW.setProperty(prop.TEXT, d.sub || "");
-				else if (key === "weather" && d.iconChar)
-					subW.setProperty(prop.TEXT, d.iconChar);
+				else if (key === "weather") subW.setProperty(prop.TEXT, d.iconChar || "");
 				if (kind === "progress") applyFill(d.level);
 			}
 			refresh();
