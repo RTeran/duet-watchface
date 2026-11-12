@@ -16,6 +16,7 @@ import {
 	Pai,
 	Weather,
 } from "@zos/sensor";
+import { createChangeLogger, readWeatherIcon } from "./weather-icon.js";
 
 // Trial: Jost Light (OFL) on both layers — the same face the dial numerals are
 // baked with, so analog and digital speak with one geometric voice. Swap back
@@ -80,17 +81,6 @@ const COLOR_TYPE_TO_KEY = {
 // Zepp OS Time.getDay() is 1 (Mon) … 7 (Sun); index with getDay() - 1.
 const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
-// Weather condition glyphs from icons-outlined.ttf, one per bucket.
-// Buckets: 0 sunny · 1 cloudy · 2 overcast · 3 rain · 4 snow · 5 storm.
-const WEATHER_CHARS = ["\ue430", "\ue42d", "\ue2bd", "\uf1ad", "\ueb3b", "\uebdb"];
-// getForecast().forecastData.data[0].index (0–28) → bucket. Index meanings
-// per the ZeppOS Weather docs; night variants fold into their daytime bucket.
-const WEATHER_INDEX_TO_BUCKET = {
-	0: 1, 1: 3, 2: 4, 3: 0, 4: 2, 5: 3, 6: 4, 7: 3, 8: 4, 9: 4,
-	10: 3, 11: 2, 12: 4, 13: 2, 14: 2, 15: 5, 16: 4, 17: 2, 18: 5, 19: 5,
-	20: 5, 21: 5, 22: 2, 23: 2, 24: 5, 25: 0, 26: 1, 27: 3, 28: 0,
-};
-
 // Badge geometry — both on the horizontal centerline, equidistant between the
 // dial numerals (3 & 9) and the digital heart. Symmetric about CX.
 const COMP_AXIS_Y = CY;
@@ -115,6 +105,9 @@ const COMP_BOTTOM_Y = CY + 125;
 const TEMP_ROOT = "comp/temp/";
 const TEMP_DIGITS = [];
 for (let d = 0; d <= 9; d++) TEMP_DIGITS.push(TEMP_ROOT + d + ".png");
+const TEMP_H = 33;
+// Digit ink spans rows 7–25 of the 33px glyph PNGs, so its visual center is row 16.
+const TEMP_INK_CENTER = 16;
 
 // Edit-mode chrome — all four tap zones (color center, left, right, bottom) share ONE
 // size, so the select ring and the preview render 1:1 on every zone (assets in
@@ -333,6 +326,10 @@ WatchFace({
 		const bottomKey = TYPE_TO_DATUM[bottomType] || "weather";
 
 		// ── Data readers ─────────────────────────────────────────────────────
+		const weatherErrors = createChangeLogger((msg) =>
+			console.log("[duet] no weather icon: " + msg),
+		);
+
 		function readDatum(key) {
 			try {
 				switch (key) {
@@ -357,11 +354,9 @@ WatchFace({
 						return { value: v ? String(v) : "--" };
 					}
 					case "weather": {
-						// Active 2 firmware only has getForecast(); older ones only the legacy name.
-						const d0 = (weather.getForecast || weather.getForecastWeather).call(weather)
-							.forecastData.data[0];
-						const b = WEATHER_INDEX_TO_BUCKET[d0.index];
-						return { iconChar: WEATHER_CHARS[b === undefined ? 0 : b] };
+						const iconChar = readWeatherIcon(weather, weatherErrors.report);
+						if (iconChar) weatherErrors.reset();
+						return { iconChar };
 					}
 					case "pai": {
 						const v = pai ? pai.getTotal() || 0 : 0;
@@ -396,29 +391,37 @@ WatchFace({
 				show_level: NORMAL,
 			});
 
-			// Weather's value is updated by the firmware, so it has no JS handle.
+			// Weather's value is updated by the firmware, so its text can't be set from
+			// JS. Two identical copies (above the icon / centered in the badge) are
+			// toggled with VISIBLE: verified in the simulator, whereas moving a
+			// firmware-bound TEXT_IMG via setProperty is untested.
 			let valueW = null;
+			let tempTopW = null;
+			let tempCenteredW = null;
 			if (key === "weather") {
-				createWidget(widget.TEXT_IMG, {
-					x: centerX - COMP_BOX_W / 2,
-					y: centerY - 24,
-					w: COMP_BOX_W,
-					h: 33,
-					font_array: TEMP_DIGITS,
-					unit_sc: TEMP_ROOT + "deg.png",
-					unit_tc: TEMP_ROOT + "deg.png",
-					unit_en: TEMP_ROOT + "deg.png",
-					imperial_unit_sc: TEMP_ROOT + "deg.png",
-					imperial_unit_tc: TEMP_ROOT + "deg.png",
-					imperial_unit_en: TEMP_ROOT + "deg.png",
-					negative_image: TEMP_ROOT + "minus.png",
-					// Without it, "no weather data" renders as a bare "0" (the unit is dropped).
-					invalid_image: TEMP_ROOT + "minus.png",
-					type: data_type.WEATHER_CURRENT,
-					h_space: 0,
-					align_h: align.CENTER_H,
-					show_level: NORMAL,
-				});
+				const tempWidget = (y) =>
+					createWidget(widget.TEXT_IMG, {
+						x: centerX - COMP_BOX_W / 2,
+						y,
+						w: COMP_BOX_W,
+						h: TEMP_H,
+						font_array: TEMP_DIGITS,
+						unit_sc: TEMP_ROOT + "deg.png",
+						unit_tc: TEMP_ROOT + "deg.png",
+						unit_en: TEMP_ROOT + "deg.png",
+						imperial_unit_sc: TEMP_ROOT + "deg.png",
+						imperial_unit_tc: TEMP_ROOT + "deg.png",
+						imperial_unit_en: TEMP_ROOT + "deg.png",
+						negative_image: TEMP_ROOT + "minus.png",
+						// Without it, "no weather data" renders as a bare "0" (the unit is dropped).
+						invalid_image: TEMP_ROOT + "minus.png",
+						type: data_type.WEATHER_CURRENT,
+						h_space: 0,
+						align_h: align.CENTER_H,
+						show_level: NORMAL,
+					});
+				tempTopW = tempWidget(centerY - 24);
+				tempCenteredW = tempWidget(centerY - TEMP_INK_CENTER);
 			} else {
 				valueW = createWidget(widget.TEXT, {
 					x: centerX - COMP_BOX_W / 2,
@@ -496,8 +499,12 @@ WatchFace({
 				const d = readDatum(key);
 				if (valueW) valueW.setProperty(prop.TEXT, d.value || "");
 				if (isDate) subW.setProperty(prop.TEXT, d.sub || "");
-				else if (key === "weather" && d.iconChar)
-					subW.setProperty(prop.TEXT, d.iconChar);
+				else if (key === "weather") {
+					const hasIcon = !!d.iconChar;
+					subW.setProperty(prop.TEXT, d.iconChar || "");
+					tempTopW.setProperty(prop.VISIBLE, hasIcon);
+					tempCenteredW.setProperty(prop.VISIBLE, !hasIcon);
+				}
 				if (kind === "progress") applyFill(d.level);
 			}
 			refresh();

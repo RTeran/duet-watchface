@@ -1,37 +1,62 @@
 """Build assets/*/fonts/icons-outlined.ttf — the icon set the complications use.
 
 The watchface renders each complication's identifier as a TEXT widget in this
-font (tintable, scalable, one glyph per datum). It is Google's "Material Icons
-Outlined" subset to the ten glyphs Duet needs and, crucially, converted from CFF
-(the .otf Google ships) to glyf outlines — ZeppOS renders glyf TTFs (sfntVersion
+font (tintable, scalable, one glyph per datum). It merges the four data glyphs
+from Google's "Material Icons Outlined" with the six weather glyphs from
+"Material Symbols Outlined", and, crucially, converts the Material Icons CFF
+outlines (the .otf Google ships) to glyf — ZeppOS renders glyf TTFs (sfntVersion
 0x00010000); a CFF-flavoured .ttf shows nothing on device.
 
-Glyphs (classic Material Icons codepoints, kept as the runtime chars in index.js):
-    data     e536 directions_walk · ef55 local_fire_department
+Glyphs (runtime chars: watchface/index.js for data, watchface/weather-icon.js
+for weather):
+    data     Material Icons Outlined
+             e536 directions_walk · ef55 local_fire_department
              e1a4 battery_full     · e87d favorite
-    weather  e430 wb_sunny · e42d wb_cloudy · e2bd cloud
-             f1ad umbrella · eb3b ac_unit   · ebdb thunderstorm
+    weather  Material Symbols Outlined, instanced at FILL 0 / wght 400 / opsz 24
+             e81a sunny · f172 partly_cloudy_day · f15c cloud
+             f176 rainy · e2cd weather_snowy     · ebdb thunderstorm
+
+Codepoints at U+F000 and above are re-mapped 0x1000 lower (f172 → e172, …): at
+f1ad a glyph drew blank on the Active 2 and in the simulator, while the same
+outline at a lower codepoint drew fine. Both sources are Apache 2.0 (see
+LICENSE-material-icons.txt).
+
+The Symbols source is committed as a small static subset
+(MaterialSymbolsOutlined-weather-subset.ttf); when it is missing, the full
+variable font is downloaded from a pinned commit and the subset rebuilt.
 
 Run:  pip install fonttools  &&  python3 tools/make-icon-font.py
 Only needs re-running when the glyph set changes; the output is committed.
 """
 import io
 import os
+import tempfile
 import urllib.request
 
 from fontTools.ttLib import TTFont, newTable
 from fontTools.subset import Subsetter, Options
 from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.pens.transformPen import TransformPen
+from fontTools.varLib import instancer
 
 BASE = os.path.dirname(__file__)
 SRC = os.path.join(BASE, "MaterialIconsOutlined-Regular.otf")
 SRC_URL = (
-    "https://github.com/google/material-design-icons/raw/master/font/"
-    "MaterialIconsOutlined-Regular.otf"
+    "https://github.com/google/material-design-icons/raw/"
+    "f7bd4f25f3764883717c09a1fd867f560c9a9581/font/MaterialIconsOutlined-Regular.otf"
 )
-UNICODES = [0xE536, 0xEF55, 0xE1A4, 0xE87D,
-            0xE430, 0xE42D, 0xE2BD, 0xF1AD, 0xEB3B, 0xEBDB]
+UNICODES = [0xE536, 0xEF55, 0xE1A4, 0xE87D]
+SYMBOLS_SUBSET = os.path.join(BASE, "MaterialSymbolsOutlined-weather-subset.ttf")
+SYMBOLS_URL = (
+    "https://github.com/google/material-design-icons/raw/"
+    "10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/variablefont/"
+    "MaterialSymbolsOutlined%5BFILL,GRAD,opsz,wght%5D.ttf"
+)
+SYMBOLS_AXES = {"FILL": 0, "GRAD": 0, "opsz": 24, "wght": 400}
+SYMBOLS_UNICODES = [0xE81A, 0xF172, 0xF15C, 0xF176, 0xE2CD, 0xEBDB]
+REMAP_FROM = 0xF000
+REMAP_OFFSET = 0x1000
 OUTPUTS = [
     os.path.join(BASE, "..", "assets", "466x466-amazfit-active-2-round", "fonts", "icons-outlined.ttf"),
     os.path.join(BASE, "..", "assets", "466x466-amazfit-gtr-4", "fonts", "icons-outlined.ttf"),
@@ -110,12 +135,72 @@ def recenter_glyphs_h(font):
     return font
 
 
+def build_symbols_subset(variable_path, out_path, unicodes, axes):
+    font = instancer.instantiateVariableFont(TTFont(variable_path), axes)
+    opts = Options()
+    opts.glyph_names = True
+    opts.notdef_outline = True
+    ss = Subsetter(options=opts)
+    ss.populate(unicodes=unicodes)
+    ss.subset(font)
+    font.save(out_path)
+
+
+def add_symbols(font, path, unicodes):
+    """Copy the given Material Symbols glyphs, scaled to font's em, into font."""
+    src = TTFont(path)
+    scale = font["head"].unitsPerEm / src["head"].unitsPerEm
+    src_cmap = src.getBestCmap()
+    src_glyphs = src.getGlyphSet()
+    glyf = font["glyf"]
+    order = font.getGlyphOrder()
+    added = {}
+    for u in unicodes:
+        name = f"sym{u:04X}"
+        pen = TTGlyphPen(None)
+        src_glyphs[src_cmap[u]].draw(TransformPen(pen, (scale, 0, 0, scale, 0, 0)))
+        glyf.glyphs[name] = pen.glyph()
+        glyf.glyphs[name].recalcBounds(glyf)
+        font["hmtx"][name] = (font["head"].unitsPerEm, glyf.glyphs[name].xMin)
+        order.append(name)
+        added[u] = name
+    font.setGlyphOrder(order)
+    glyf.glyphOrder = order
+    for table in font["cmap"].tables:
+        if table.isUnicode():
+            table.cmap.update(added)
+    return font
+
+
+def remap_high_codepoints(font):
+    """Move every codepoint at REMAP_FROM or above REMAP_OFFSET lower."""
+    remap = {}
+    for table in font["cmap"].tables:
+        if not table.isUnicode():
+            continue
+        for u in [u for u in table.cmap if u >= REMAP_FROM]:
+            new = u - REMAP_OFFSET
+            assert new not in table.cmap, f"remap of {u:#x} collides with {new:#x}"
+            table.cmap[new] = table.cmap.pop(u)
+            remap[u] = new
+    return font, remap
+
+
 def main():
     if not os.path.exists(SRC):
         print(f"downloading {SRC_URL}")
         urllib.request.urlretrieve(SRC_URL, SRC)
 
-    font = recenter_glyphs_h(otf_to_ttf(subset_otf(SRC, UNICODES)))
+    if not os.path.exists(SYMBOLS_SUBSET):
+        with tempfile.TemporaryDirectory() as tmp:
+            variable = os.path.join(tmp, "MaterialSymbolsOutlined.ttf")
+            print(f"downloading {SYMBOLS_URL}")
+            urllib.request.urlretrieve(SYMBOLS_URL, variable)
+            build_symbols_subset(variable, SYMBOLS_SUBSET, SYMBOLS_UNICODES, SYMBOLS_AXES)
+
+    font = otf_to_ttf(subset_otf(SRC, UNICODES))
+    font = recenter_glyphs_h(add_symbols(font, SYMBOLS_SUBSET, SYMBOLS_UNICODES))
+    font, remap = remap_high_codepoints(font)
 
     buf = io.BytesIO()
     font.save(buf)
@@ -123,7 +208,8 @@ def main():
     out = TTFont(buf)
     cmap = out.getBestCmap()
     assert "glyf" in out and out.sfntVersion == "\x00\x01\x00\x00", "not a glyf TTF"
-    missing = [hex(u) for u in UNICODES if u not in cmap]
+    expected = [remap.get(u, u) for u in UNICODES + SYMBOLS_UNICODES]
+    missing = [hex(u) for u in expected if u not in cmap]
     assert not missing, f"missing glyphs: {missing}"
     print(f"OK: glyf TTF, {len(cmap)} glyphs")
 
