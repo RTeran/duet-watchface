@@ -5,7 +5,8 @@ Everything is circular (alpha-masked) per the store requirement:
   store/icon-240.png            240x240 app icon — circular, transparent bg,
                                 no margins (Zepp Console icon spec)
   store/preview-<theme>.png     466x466 dial at 10:09 with the DEFAULT
-                                complications (Date left, Battery right)
+                                complications (Date left, Battery right,
+                                Steps bottom)
   store/preview-aod.png         466x466 AOD look: gray hands + digits only
   store/preview-animated.gif    every theme + complication configs + AOD,
                                 900ms/frame, circular (1-bit transparency)
@@ -14,17 +15,21 @@ Everything is circular (alpha-masked) per the store requirement:
 
 Reuses the renderer in render-assets.py (backgrounds, hands, rings, fonts).
 Badge geometry mirrors the runtime widgets in watchface/index.js
-(makeComplication): value 26px centered at cy-7, weekday 13px / icon 17px
-centered at cy+13, progress fill clockwise from 12 o'clock.
+(makeComplication): value 28px centered at cy-7.5, weekday 14px / icon 18px
+centered at cy+14, progress fill clockwise from 12 o'clock.
+
+Pass an output directory as the first argument to render somewhere other than
+store/ (e.g. to review the pack before replacing it).
 """
 
 import importlib.util
 import os
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 BASE = os.path.dirname(__file__)
-STORE = os.path.join(BASE, "..", "store")
+STORE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "..", "store")
 
 spec = importlib.util.spec_from_file_location(
     "render_assets", os.path.join(BASE, "render-assets.py")
@@ -36,16 +41,27 @@ spec.loader.exec_module(ra)
 COMP_LEFT_X = 120
 COMP_RIGHT_X = 346
 COMP_AXIS_Y = ra.CX  # 233 — the horizontal centerline
-COMP_VALUE_SIZE = 26
-COMP_SUB_SIZE = 13
-COMP_ICON_SIZE = 17
-VALUE_DY = -7   # value box y [cy-22, cy+8] -> center
-SUB_DY = 13     # weekday box y [cy+3, cy+23] / icon box y [cy+2, cy+24] -> center
+COMP_BOTTOM_X = ra.CX
+COMP_BOTTOM_Y = ra.CX + 125
+COMP_VALUE_SIZE = 28
+COMP_SUB_SIZE = 14
+COMP_ICON_SIZE = 18
+VALUE_DY = -7.5  # value box y [cy-24, cy+9] -> center
+SUB_DY = 14      # weekday box y [cy+3, cy+25] / icon box y [cy+2, cy+26] -> center
+SLOT_CENTERS = (
+    (COMP_LEFT_X, COMP_AXIS_Y),
+    (COMP_RIGHT_X, COMP_AXIS_Y),
+    (COMP_BOTTOM_X, COMP_BOTTOM_Y),
+)
 
 SCREENSHOT_THEMES = ["champagne", "sapphire", "emerald"]
 SMALL = 360  # documented circular-screen screenshot size
 
 SPEC_BY_DATUM = {s[0]: s for s in ra.COMP_PREVIEW_SPECS}
+# The edit-preview spec still names the pre-1.1.2 weather glyph, which the
+# Material Symbols subset no longer has; the store shows the sunny bucket
+# (WEATHER_CHARS[0] in watchface/weather-icon.js).
+SPEC_BY_DATUM["weather"] = ("weather", "closed", "21\u00b0", None, "\ue81a", 0)
 
 
 def render_badge(datum):
@@ -78,20 +94,20 @@ def render_badge(datum):
     return img.resize((n, n), Image.LANCZOS)
 
 
-DEFAULT_COMPS = ("date", "battery")
+DEFAULT_COMPS = ("date", "battery", "steps")
 
 
 def background_with_badges(background, comps=DEFAULT_COMPS):
     """Badges composite onto the background so render_preview draws the hands
     ON TOP — same z-order as the watch (badge widgets precede TIME_POINTER).
-    `comps` is (left_datum, right_datum); None leaves that slot empty."""
+    `comps` is (left, right, bottom) datums; None leaves that slot empty."""
     bg = background.convert("RGBA").copy()
-    for datum, cx in zip(comps, (COMP_LEFT_X, COMP_RIGHT_X)):
+    for datum, (cx, cy) in zip(comps, SLOT_CENTERS):
         if datum is None:
             continue
         badge = render_badge(datum)
         bg.alpha_composite(
-            badge, (int(cx - ra.COMP_R_OUTER), int(COMP_AXIS_Y - ra.COMP_R_OUTER))
+            badge, (int(cx - ra.COMP_R_OUTER), int(cy - ra.COMP_R_OUTER))
         )
     return bg
 
@@ -127,7 +143,7 @@ def to_gif_frames(images):
 
 def render_gif_frames(hour_hand, plain_background, themes):
     """Story: every theme with the default complications, then the champagne
-    theme across configurations (no badges, activity pair, ambient pair), AOD."""
+    theme across configurations (no badges, activity trio, ambient trio), AOD."""
     default_bg = background_with_badges(plain_background)
     frames = []
 
@@ -141,7 +157,11 @@ def render_gif_frames(hour_hand, plain_background, themes):
     champagne_minute = ra.render_hand(
         ra.MINUTE_TIP_R, ra.MINUTE_VIS_R, ra.MINUTE_W, champagne_rgb + (255,)
     )
-    for comps in ((None, None), ("steps", "hr"), ("weather", "pai")):
+    for comps in (
+        (None, None, None),
+        ("steps", "hr", "calories"),
+        ("weather", "pai", "date"),
+    ):
         bg = background_with_badges(plain_background, comps)
         frames.append(
             ra.render_preview(bg, hour_hand, champagne_minute, champagne_rgb)
